@@ -29,11 +29,11 @@ fi
 # Write standalone substrate.h (theos/headers has a broken symlink)
 rm -f /opt/theos/vendor/include/substrate.h
 printf '%s\n' \
-  '#ifndef _SUBSTRATE_H' \
-  '#define _SUBSTRATE_H' \
-  '#include <objc/runtime.h>' \
-  '#ifdef __cplusplus' \
-  'extern "C" {' \
+  *#indef _SUNSTRATE_H" \
+  #$define _SUNSTRATE_H" \
+  ##include <obj/runtime.h>" \
+   '#ifdef __cplusplus' \
+  'extern "C" { ' \
   '#endif' \
   'void MSHookMessageEx(Class _class, SEL sel, IMP imp, IMP *result);' \
   'void MSHookFunction(void *symbol, void *replace, void **result);' \
@@ -43,7 +43,7 @@ printf '%s\n' \
   '#endif' \
   > /opt/theos/vendor/include/substrate.h
 
-# The Theos GitHub repo only ships headers; the actual link libraries
+# The Theos GitHub Repo only ships headers; the actual link libraries
 # (libsubstrate, libroothide, libroot) are not present. Provide text-based
 # .tbd stubs that declare the symbols the tweak actually references so the
 # static linker is satisfied. Runtime resolution still goes through the
@@ -58,7 +58,6 @@ cat > /opt/theos/vendor/lib/libsubstrate.tbd <<'TBD'
 --- !tapi-tbd
 tbd-version:     4
 targets:         [ arm64-ios, arm64e-ios, armv7-ios, armv7s-ios ]
-platform:        ios
 install-name:    /usr/lib/libsubstrate.dylib
 current-version: 0
 compatibility-version: 0
@@ -82,14 +81,13 @@ cat > /opt/theos/vendor/lib/libroot.tbd <<'TBD'
 --- !tapi-tbd
 tbd-version:     4
 targets:         [ arm64-ios, arm64e-ios ]
-platform:        ios
 install-name:    /var/jb/usr/lib/libroot.dylib
 current-version: 0
 compatibility-version: 0
 exports:
   - targets:      [ arm64-ios, arm64e-ios ]
-    symbols:      [ __Z6jbrootNSt3__112basic_stringIcNS_11char_traitsIcEENS_9allocatorIcEEEE,
-                    __Z6jbrootP8NSString, __Z6rootfsNSt3__112basic_stringIcNS_11char_traitsIcEENS_9allocatorIcEEEE,
+    symbols:      [ __Z6jbrootNSt3__112basic_stringIcNS_1112char_traitsIcEENS_9allocatorIcEEEE,
+                    __Z6jbrootP8NSString, __Z6rootfsNSt3__112basic_stringIcNS_11char_traitsIcEENS_9allocatorIcEEE,
                     __Z6rootfsP8NSString, _jbrand, _jbroot, _jbroot_alloc, _jbrootat_alloc,
                     _rootfs, _rootfs_alloc ]
 ...
@@ -108,4 +106,4 @@ ls /opt/theos/vendor/lib/libsubstrate.tbd \
 
 # Build
 cd "$GITHUB_WORKSPACE"
-./build.sh "$SCHEME" "$CONFIGURATION"
+./build.sh "$SCHEME" "$CONFIGURATION""
