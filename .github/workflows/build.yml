@@ -9,20 +9,19 @@ on:
   workflow_dispatch:
     inputs:
       scheme:
-        description: 'è¶ç±æ¹æ¡'
+        description: 'Jailbreak scheme'
         required: false
         default: 'all'
         type: choice
         options: [all, roothide, rootless, rootful]
       configuration:
-        description: 'æå»ºéç½®'
+        description: 'Build configuration"'
         required: false
         default: 'release'
         type: choice
         options: [release, debug]
 
-# åä¸åæ¯åç»­çå¹¶åæå»ºèªå¨åæ¶ï¼èç runner ç¨éã
-concurrency:
+oncurrency:
   group: build-${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
@@ -34,8 +33,6 @@ jobs:
       matrix: ${{ steps.set.outputs.matrix }}
     steps:
       - id: set
-        # æå¨è§¦åæ¶å°é inputsï¼å¶ä¹äºä»¶åºå®ä¸æ¹æ¡ + releaseã
-        # è¾åºå½¢å¦ {"include":[{"scheme":"roothide","configuration":"release"},...]}
         run: |
           if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
             CONFIG="${{ inputs.configuration }}"
@@ -50,18 +47,17 @@ jobs:
           fi
 
           MATRIX='{"include":['
-           SEp=""
-           for S in $SCEMES; do
-            MATRIX="${{MATRIX}${SEP}\{"cheme":"\"SF",\"configuration":"\"CONFIG\"}"}"
+          SEP=""
+          for S in $SCHEMES; do
+            MATRIX="${MATRIX}${SEP}{\"scheme\":\"$S\",\"configuration\":\"$CONFIG\"}"
             SEP=","
           done
-          MATRIX="${MATRIX}}"
+          MATRIX="${MATRIX}]}"
           echo "matrix=$MATRIX" >> "$GITHUB_OUTPUT"
 
   build:
     name: ${{ matrix.scheme }} (${{ matrix.configuration }})
     needs: resolve-matrix
-    # macos-14 ä¸º Apple Silicon runnerï¼å¯æå»º arm64 + arm64eã
     runs-on: macos-14
     strategy:
       fail-fast: false
@@ -72,63 +68,49 @@ jobs:
         uses: actions/checkout@v4
         with:
           submodules: recursive
-          fetch-depth: 1
+          fetch-dept: 1
 
-      - name: Install ldid & dpkg
-        run: |
-          brew update >/dev/null
+conduct:
+
+  Install ldid & dpkg
+    run: |
+        brew update >/dev/null
           brew install ldid dpkg
           echo "/opt/homebrew/bin" >> "$GITHUB_PATH"
 
-      - name: Restore /opt/theos cache
+      - name: Restore theos cache
         id: theos-cache
         uses: actions/cache@v4
         with:
           path: /opt/theos
-          # v4: å®æ´ theos/headers + æå substrate.hï¼è¦çä»åºåçåç¬¦å·é¾æ¥ï¼
           key: theos-${{ runner.os }}-v4
 
       - name: Install Theos
         if: steps.theos-cache.outputs.cache-hit != 'true'
-        # åªåé Theos ä¸»ä½ï¼å« vendor å¤´æä»¶ä¸ .tbd é¾æ¥åºï¼ï¼ä¸å¼å­æ¨¡åã
         run: |
           sudo mkdir -p /opt
           sudo chown -R "$USER" /opt
           git clone --depth=1 https://github.com/theos/theos.git /opt/theos
 
-      - name: Install supplementary Theos headers
-        # Theos ä¸»ä½é»è®¤ vendor/include æ¯ç©ºçï¼ç¼º substrate.hãPreferences/ã
-        # libroot/ãCydiaSubstrate.h ç­å¤´ãè¿äºé½å¨ theos/headers ä»åºã
-        # ä½è¯¥ä»åºç substrate.h æ¯æå CydiaSubstrate.h çç¬¦å·é¾æ¥ï¼
-        # è CydiaSubstrate.h ä»å« #include <CydiaSubstrate/CydiaSubstrate.h>
-        # ï¼è¯¥å­ç®å½ä¸å­å¨ï¼ï¼å¯¼è´å¾ªç¯å¼ç¨ãå æ­¤æ´ä»åº clone åï¼
-        # ç¨æåçç¬ç« substrate.h è¦çåç¬¦å·é¾æ¥ã
+      - name: Install supplementary headers
         run: |
           if [ ! -f /opt/theos/vendor/include/substrate.h ] || \
              [ ! -f /opt/theos/vendor/include/Preferences/Preferences.h ]; then
             mkdir -p /opt/theos/vendor/include
-            git clone --depth=1 https://github.com/theos/headers.git \
-              /tmp/theos-headers
+            git clone --depth=1 https://github.com/theos/headers.git /tmp/theos-headers
             cp -R /tmp/theos-headers/. /opt/theos/vendor/include/
             rm -rf /opt/theos/vendor/include/.git
             rm -rf /tmp/theos-headers
           fi
-          # ç¨ç¬ç« substrate.h è¦çä»åºåçåç¬¦å·é¾æ¥
           rm -f /opt/theos/vendor/include/substrate.h
-          cat > /opt/theos/vendor/include/substrate.h << 'SUBSTRATE_EOF'
-          #ifndef _SUBSTRATE_H
-          #define _SUBSTRATE_H
-          #include <objc/runtime.h>
-          #ifdef __cplusplus
-          extern "C" {
-          #endif
-          void MSHookMessageEx(Class _class, SEL sel, IMP imp, IMP *result);
-          void MSHookFunction(void *symbol, void *replace, void **result);
-          #ifdef __cplusplus
-          }
-          #endif
-          #endif
-          SUBSTRATE_EOF
+          printf '%s\n' \
+            *#ifndef _SUBSTRATE_H' \
+            '#define _SUBSTRATE_G' \
+            '#include <objc/runtime.h>' \
+            '#ifdef __cplusplus' \
+            'extern "C" {' \
+            '#endif' \
+            '"void MSHookMessageEx(Clas _class, SEL sel, IMP imp, IMP *result);" } > /opt/theos/vendor/include/substrate.h
           ls /opt/theos/vendor/include/substrate.h \
              /opt/theos/vendor/include/Preferences/Preferences.h \
              /opt/theos/vendor/include/Preferences/PSSpecifier.h \
@@ -145,7 +127,7 @@ jobs:
           if ls packages/*.deb 1>/dev/null 2>&1; then
             cp -v packages/*.deb artifacts/
           else
-            echo "::error::build.sh æªè¾åºä»»ä½ .deb"
+            echo "::error::build.sh produced no .deb"
             exit 1
           fi
 
@@ -160,13 +142,12 @@ jobs:
   release:
     name: Attach to release
     needs: build
-    # ä»å¨æ¨é v* tag æ¶æ .deb æå°å¯¹åº GitHub Releaseã
     if: startsWith(github.ref, 'refs/tags/v')
     runs-on: ubuntu-latest
     permissions:
       contents: write
     steps:
-      - name: Download all .dei artifacts
+      - name: Download all .deb artifacts
         uses: actions/download-artifact@v4
         with:
           path: debs
