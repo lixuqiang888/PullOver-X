@@ -7,155 +7,44 @@ on:
   pull_request:
     branches: [main, master]
   workflow_dispatch:
-    inputs:
-      scheme:
-        description: 'Jailbreak scheme'
-        required: false
-        default: 'all'
-        type: choice
-        options: [all, roothide, rootless, rootful]
-      configuration:
-        description: 'Build configuration"'
-        required: false
-        default: 'release'
-        type: choice
-        options: [release, debug]
 
-oncurrency:
-  group: build-${{ github.workflow }}-${{ github.ref }}
+concurrency:
+  group: build-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
-  resolve-matrix:
-    name: Resolve matrix
-    runs-on: ubuntu-latest
-    outputs:
-      matrix: ${{ steps.set.outputs.matrix }}
-    steps:
-      - id: set
-        run: |
-          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
-            CONFIG="${{ inputs.configuration }}"
-            if [ "${{ inputs.scheme }}" = "all" ]; then
-              SCHEMES="roothide rootless rootful"
-            else
-              SCHEMES="${{ inputs.scheme }}"
-            fi
-          else
-            CONFIG="release"
-            SCHEMES="roothide rootless rootful"
-          fi
-
-          MATRIX='{"include":['
-          SEP=""
-          for S in $SCHEMES; do
-            MATRIX="${MATRIX}${SEP}{\"scheme\":\"$S\",\"configuration\":\"$CONFIG\"}"
-            SEP=","
-          done
-          MATRIX="${MATRIX}]}"
-          echo "matrix=$MATRIX" >> "$GITHUB_OUTPUT"
-
   build:
-    name: ${{ matrix.scheme }} (${{ matrix.configuration }})
-    needs: resolve-matrix
     runs-on: macos-14
     strategy:
       fail-fast: false
-      matrix: ${{ fromJson(needs.resolve-matrix.outputs.matrix) }}
-
+      matrix:
+        scheme: [roothide, rootless, rootful]
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
         with:
           submodules: recursive
-          fetch-dept: 1
-
-conduct:
-
-  Install ldid & dpkg
-    run: |
-        brew update >/dev/null
-          brew install ldid dpkg
-          echo "/opt/homebrew/bin" >> "$GITHUB_PATH"
-
-      - name: Restore theos cache
-        id: theos-cache
-        uses: actions/cache@v4
-        with:
-          path: /opt/theos
-          key: theos-${{ runner.os }}-v4
-
-      - name: Install Theos
-        if: steps.theos-cache.outputs.cache-hit != 'true'
-        run: |
-          sudo mkdir -p /opt
-          sudo chown -R "$USER" /opt
-          git clone --depth=1 https://github.com/theos/theos.git /opt/theos
-
-      - name: Install supplementary headers
-        run: |
-          if [ ! -f /opt/theos/vendor/include/substrate.h ] || \
-             [ ! -f /opt/theos/vendor/include/Preferences/Preferences.h ]; then
-            mkdir -p /opt/theos/vendor/include
-            git clone --depth=1 https://github.com/theos/headers.git /tmp/theos-headers
-            cp -R /tmp/theos-headers/. /opt/theos/vendor/include/
-            rm -rf /opt/theos/vendor/include/.git
-            rm -rf /tmp/theos-headers
-          fi
-          rm -f /opt/theos/vendor/include/substrate.h
-          printf '%s\n' \
-            *#ifndef _SUBSTRATE_H' \
-            '#define _SUBSTRATE_G' \
-            '#include <objc/runtime.h>' \
-            '#ifdef __cplusplus' \
-            'extern "C" {' \
-            '#endif' \
-            '"void MSHookMessageEx(Clas _class, SEL sel, IMP imp, IMP *result);" } > /opt/theos/vendor/include/substrate.h
-          ls /opt/theos/vendor/include/substrate.h \
-             /opt/theos/vendor/include/Preferences/Preferences.h \
-             /opt/theos/vendor/include/Preferences/PSSpecifier.h \
-             /opt/theos/vendor/include/Preferences/PSControlTableCell.h
-
-      - name: Build PullOver X
-        run: |
-          cd "$GITHUB_WORKSPACE"
-          ./build.sh "${{ matrix.scheme }}" "${{ matrix.configuration }}"
-
-      - name: Collect .deb artifacts
-        run: |
-          mkdir -p artifacts
-          if ls packages/*.deb 1>/dev/null 2>&1; then
-            cp -v packages/*.deb artifacts/
-          else
-            echo "::error::build.sh produced no .deb"
-            exit 1
-          fi
-
-      - name: Upload .deb
+          fetch-depth: 1
+      - name: Build
+        run: bash ci-build.sh ${{ matrix.scheme }} release
+      - name: Upload
         uses: actions/upload-artifact@v4
         with:
-          name: PullOverX-${{ matrix.scheme }}-${{ matrix.configuration }}
-          path: artifacts/*.deb
+          name: PullOverX-${{ matrix.scheme }}
+          path: packages/*.deb
           if-no-files-found: error
-          retention-days: 30
-
   release:
-    name: Attach to release
     needs: build
     if: startsWith(github.ref, 'refs/tags/v')
     runs-on: ubuntu-latest
     permissions:
       contents: write
     steps:
-      - name: Download all .deb artifacts
-        uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v4
         with:
           path: debs
           pattern: PullOverX-*
           merge-multiple: true
-
-      - name: Upload to release
-        uses: softprops/action-gh-release@v2
+      - uses: softprops/action-gh-release@v2
         with:
           files: debs/*.deb
           fail_on_unmatched_files: true
