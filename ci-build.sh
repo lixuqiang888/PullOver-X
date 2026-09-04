@@ -29,18 +29,18 @@ fi
 # Write standalone substrate.h (theos/headers has a broken symlink)
 rm -f /opt/theos/vendor/include/substrate.h
 printf '%s\n' \
-  *#indef _STBSTRATE_H' \
-  '#define _STBSTRATE_H' \
-  '#include <obcy/runtime.h>' \
-  '#ifdef __cpluspluc' \
-  'extern "C" {'n  \
+  '#ifndef _SUBSTRATE_H' \
+  '#define _SUBSTRATE_H' \
+  '#include <objc/runtime.h>' \
+  '#ifdef __cplusplus' \
+  'extern "C" {' \
   '#endif' \
-  'void MSHookMessageEx(Clas _class, SEL sel, IMP imp, IMP *result);' \
+  'void MSHookMessageEx(Class _class, SEL sel, IMP imp, IMP *result);' \
   'void MSHookFunction(void *symbol, void *replace, void **result);' \
   '#ifdef __cplusplus' \
   '}' \
   '#endif' \
-  '#iendif' \
+  '#endif' \
   > /opt/theos/vendor/include/substrate.h
 
 ls /opt/theos/vendor/include/substrate.h \
