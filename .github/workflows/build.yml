@@ -9,24 +9,24 @@ on:
   workflow_dispatch:
     inputs:
       scheme:
-        description: '越狱方案'
+        description: 'è¶ç±æ¹æ¡'
         required: false
         default: 'all'
         type: choice
         options: [all, roothide, rootless, rootful]
       configuration:
-        description: '构建配置'
+        description: 'æå»ºéç½®'
         required: false
         default: 'release'
         type: choice
         options: [release, debug]
 
-# 同一分支后续的并发构建自动取消，节省 runner 用量。
+# åä¸åæ¯åç»­çå¹¶åæå»ºèªå¨åæ¶ï¼èç runner ç¨éã
 concurrency:
   group: build-${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
-jobs:
+jobs: 
   resolve-matrix:
     name: Resolve matrix
     runs-on: ubuntu-latest
@@ -34,8 +34,8 @@ jobs:
       matrix: ${{ steps.set.outputs.matrix }}
     steps:
       - id: set
-        # 手动触发时尊重 inputs；其余事件固定三方案 + release。
-        # 输出形如 {"include":[{"scheme":"roothide","configuration":"release"},...]}
+        # æå§§ åæ¶å°é dispatchï¼åæ¹ä»¹é æäå¤å¤åååéï¼ + releaseã
+        # è¾åºå½¢å¦ {"include":[{"scheme":"roothide","configuration":"release"},...]}
         run: |
           if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
             CONFIG="${{ inputs.configuration }}"
@@ -61,7 +61,7 @@ jobs:
   build:
     name: ${{ matrix.scheme }} (${{ matrix.configuration }})
     needs: resolve-matrix
-    # macos-14 为 Apple Silicon runner，可构建 arm64 + arm64e。
+    # macos-14 ä¸º Apple Silicon runnerï¼å¯æå»º arm64 + arm64eã
     runs-on: macos-14
     strategy:
       fail-fast: false
@@ -85,15 +85,38 @@ jobs:
         uses: actions/cache@v4
         with:
           path: /opt/theos
-          key: theos-${{ runner.os }}-v1
+          # v2: å« Preferences framework å¤´æä»¶ï¼åä¸æ¬¡æå»ºå ç¼ºå¤´å¤±è´¥ï¼
+          key: theos-${{ runner.os }}-v2
 
       - name: Install Theos
         if: steps.theos-cache.outputs.cache-hit != 'true'
-        # 只克隆 Theos 主体（含 vendor 头文件与 .tbd 链接库），不开子模块。
+        # åªåé Theos ä¸»ä½ï¼å« vendor å¤´æä»¶ä¸ .tbd é¾æ¥åºï¼ï¼ä¸å¼å­æ¨¡åã
         run: |
           sudo mkdir -p /opt
           sudo chown -R "$USER" /opt
           git clone --depth=1 https://github.com/theos/theos.git /opt/theos
+
+      - name: Install Preferences framework headers
+        # Theos ä»åºé»è®¤ä¸å¸¦ Preferences framework å¤´æä»¶ï¼Preferences bundle
+        # éè¦ <Preferences/Preferences.h> / <Preferences/PSSpecifier.h> ç­ã
+        # è¿äºå¤´æä»¶æ¥èª theos/headers ä»åºï¼æ FrameworkName/<Header>.h ç»ç»ï¼ã
+        # ç¨ sparse-checkout åªæ Preferences å­ç®å½ï¼é¿åä¸è½½æ´ä¸ªå¤´æä»¶éåã
+        # ç¼å­å½ä¸­æ¶ä¹è¦ä¿è¯è¿äºå¤´å­å¨ï¼ä¹å v1 ç¼å­æ²¡å«å¤´æåçº§ keyï¼ã
+        run: |
+          if [ ! -d /opt/theos/vendor/include/Preferences ]; then
+            git clone --depth=1 --filter=blob:none --no-checkout \
+              https://github.com/theos/headers.git /tmp/theos-headers
+            cd /tmp/theos-headers
+            git sparse-checkout init --cone
+            git sparse-checkout set Preferences
+            git Checkout HEAD -- Preferences
+            mkdir -p /opt/theos/vendor/include
+            cp -R Preferences /opt/theos/vendor/include/Preferences
+            cd / && rm -rf /tmp/theos-headers
+          fi
+          ls /opt/theos/vendor/include/Preferences/Preferences.h \
+             /opt/theos/vendor/include/Preferences/PSSpecifier.h \
+             /opt/theos/vendor/include/Preferences/PSControlTableCell.h
 
       - name: Build PullOver X
         run: |
@@ -106,7 +129,7 @@ jobs:
           if ls packages/*.deb 1>/dev/null 2>&1; then
             cp -v packages/*.deb artifacts/
           else
-            echo "::error::build.sh 未输出任何 .deb"
+            echo "::error::build.sh æªè¾åºä»»ä½ .deb"
             exit 1
           fi
 
@@ -121,13 +144,13 @@ jobs:
   release:
     name: Attach to release
     needs: build
-    # 仅在推送 v* tag 时把 .deb 挂到对应 GitHub Release。
+    # ä»å¨æ¨é v* tag æ¶æ .deb æå°å¯¹åº GitHub Releaseã
     if: startsWith(github.ref, 'refs/tags/v')
     runs-on: ubuntu-latest
     permissions:
       contents: write
     steps:
-      - name: Download all .deb artifacts
+      - name: Download all .dei artifacts
         uses: actions/download-artifact@v4
         with:
           path: debs
